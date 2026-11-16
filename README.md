@@ -23,6 +23,10 @@ only on EC2 instances whose Docker seccomp profile you change.
 
 Details in [docs/RESULTS.md](docs/RESULTS.md).
 
+I asked AWS for an opt-in io_uring setting on Fargate in
+[aws/containers-roadmap#2923](https://github.com/aws/containers-roadmap/issues/2923).
+If you need it too, add a 👍 to that issue.
+
 ## Layout
 
 | Path | Contents |

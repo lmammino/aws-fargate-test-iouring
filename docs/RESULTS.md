@@ -192,6 +192,11 @@ What the evidence does not establish:
   - Note that upstream removed io_uring from the default profiles because of
     container-escape risk (see RESEARCH.md). Enabling it is a deliberate
     security trade-off.
+- **Feature request:** as of 2026-11-16, no public AWS roadmap item covered
+  io_uring on Fargate, and the related seccomp requests (#1782, #1957, #356 in
+  aws/containers-roadmap) had no AWS response. An opt-in io_uring setting for
+  Fargate is now requested in
+  [aws/containers-roadmap#2923](https://github.com/aws/containers-roadmap/issues/2923).
 - **Libraries that can use io_uring when available** should detect `EPERM` or
   `ENOSYS` from `io_uring_setup` at startup and fall back to epoll. The probe's
   `direct_syscall` test shows a cheap way to detect this.
