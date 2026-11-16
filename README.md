@@ -6,6 +6,15 @@ evidence, whether Linux `io_uring` works there.
 - Research and expectations: [docs/RESEARCH.md](docs/RESEARCH.md)
 - Experiment results: [docs/RESULTS.md](docs/RESULTS.md)
 
+## Spoilers
+
+As of 2026-11-16, io_uring is **not available** on ECS Fargate (platform
+1.4.0, kernel 6.1.189, eu-west-1). The kernel supports it, but
+`io_uring_setup`, `io_uring_enter` and `io_uring_register` all fail with
+`EPERM` before reaching the kernel, consistent with the container seccomp
+filter. Fargate offers no setting to change this. Details in
+[docs/RESULTS.md](docs/RESULTS.md).
+
 ```
  CloudFormation stack ──► ECR repo, cluster, task def, log group, VPC
  scripts/push-image.sh ──► docker build/push (linux/amd64) ──► ECR repo
