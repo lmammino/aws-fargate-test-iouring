@@ -1,0 +1,227 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  luciano-experiment-fargate-iouring: one-shot ECS Fargate task that probes
+  whether io_uring works. No service, load balancer or NAT gateway.
+  Delete the stack when the experiment is done.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: luciano-experiment-fargate-iouring
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{1,40}$"
+    Description: Prefix for resource names and the Project tag.
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: Tag of the probe image in the stack's ECR repository.
+  ExistingVpcId:
+    Type: String
+    Default: ""
+    Description: Optional. Leave empty to create a minimal VPC (no NAT gateway).
+  ExistingPublicSubnetIds:
+    Type: String
+    Default: ""
+    Description: >-
+      Optional, required with ExistingVpcId. Comma-separated subnet ids whose
+      route table has a route to an internet gateway.
+
+Conditions:
+  CreateVpc: !Equals [!Ref ExistingVpcId, ""]
+
+Resources:
+  # ---------- Container registry ----------
+  Repository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref NamePrefix
+      EmptyOnDelete: true
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  # ---------- Networking (only when no existing VPC is given) ----------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Condition: CreateVpc
+    Properties:
+      CidrBlock: 10.42.0.0/24
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - { Key: Name, Value: !Ref NamePrefix }
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Condition: CreateVpc
+    Properties:
+      Tags:
+        - { Key: Name, Value: !Ref NamePrefix }
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Condition: CreateVpc
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Condition: CreateVpc
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${NamePrefix}-public" }
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    Condition: CreateVpc
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Condition: CreateVpc
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.0.0/26
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - { Key: Name, Value: !Sub "${NamePrefix}-public-a" }
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Condition: CreateVpc
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.0.64/26
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - { Key: Name, Value: !Sub "${NamePrefix}-public-b" }
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  SubnetARouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateVpc
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  SubnetBRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateVpc
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  # No inbound rules. Outbound is needed for ECR pulls and CloudWatch Logs.
+  TaskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-task"
+      GroupDescription: io_uring probe task, no inbound, all outbound
+      VpcId: !If [CreateVpc, !Ref Vpc, !Ref ExistingVpcId]
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  # ---------- ECS ----------
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref NamePrefix
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub "/ecs/${NamePrefix}"
+      RetentionInDays: 7
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  # Used by the Fargate agent only: pull from this repo, write to this log group.
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: pull-image-and-write-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                Resource: !GetAtt Repository.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${LogGroup.Arn}"
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  # No task role: the probe calls no AWS APIs.
+  # Default security settings on purpose: not privileged, no added capabilities.
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref NamePrefix
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: "256"
+      Memory: "512"
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: X86_64
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: probe
+          Image: !Sub "${Repository.RepositoryUri}:${ImageTag}"
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: probe
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+Outputs:
+  ClusterName:
+    Value: !Ref Cluster
+  TaskDefinitionArn:
+    Value: !Ref TaskDefinition
+  RepositoryUri:
+    Value: !GetAtt Repository.RepositoryUri
+  LogGroupName:
+    Value: !Ref LogGroup
+  SecurityGroupId:
+    Value: !GetAtt TaskSecurityGroup.GroupId
+  SubnetIds:
+    Value: !If
+      - CreateVpc
+      - !Join [",", [!Ref PublicSubnetA, !Ref PublicSubnetB]]
+      - !Ref ExistingPublicSubnetIds

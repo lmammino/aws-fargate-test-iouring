@@ -1,0 +1,21 @@
+{
+  "name": "fargate-io-uring-poc-infra",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "synth": "cdk synth",
+    "cdk": "cdk"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.277.0",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "aws-cdk": "2.1148.1",
+    "typescript": "^7.0.2"
+  }
+}

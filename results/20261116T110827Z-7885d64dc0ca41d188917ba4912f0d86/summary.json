@@ -1,0 +1,28 @@
+{
+  "taskArn": "arn:aws:ecs:eu-west-1:ACCOUNT_ID:task/luciano-experiment-fargate-iouring/7885d64dc0ca41d188917ba4912f0d86",
+  "lastStatus": "STOPPED",
+  "stopCode": "EssentialContainerExited",
+  "stoppedReason": "Essential container in task exited",
+  "platformVersion": "1.4.0",
+  "platformFamily": "Linux",
+  "cpu": "256",
+  "memory": "512",
+  "availabilityZone": "eu-west-1b",
+  "createdAt": "2026-11-16T11:07:46.640000+00:00",
+  "startedAt": "2026-11-16T11:08:00.089000+00:00",
+  "stoppedAt": "2026-11-16T11:08:23.163000+00:00",
+  "container": {
+    "name": "probe",
+    "image": "ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/luciano-experiment-fargate-iouring:latest",
+    "imageDigest": "sha256:09492b99f2bf5faf0664e45debb52be32f2af01889ef77a42ad1bf2380f24d5f",
+    "exitCode": 11,
+    "reason": null,
+    "lastStatus": "STOPPED"
+  },
+  "probe_summary": {
+    "classification": "unavailable",
+    "exit_code": 11,
+    "explanation": "io_uring_setup failed both via raw syscall and via the io-uring crate"
+  },
+  "kernel": "6.1.189"
+}

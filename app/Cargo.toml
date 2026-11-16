@@ -1,0 +1,16 @@
+[package]
+name = "iouring-probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Diagnostic probe that checks whether io_uring works in the current container"
+
+[dependencies]
+io-uring = "0.7.16"
+libc = "0.2"
+serde_json = "1"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
