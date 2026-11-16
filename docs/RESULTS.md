@@ -210,3 +210,20 @@ The different CPUs show that the runs landed on different hosts.
 - Re-run with `scripts/run-test.sh`. Each run writes a new directory under `results/`.
 - Delete everything with `scripts/cleanup.sh --yes` (or delete the stack
   `luciano-experiment-fargate-iouring`).
+
+### Cleanup verification (2026-11-16)
+
+The stack was deleted from the console after both runs. State checked with the AWS CLI afterwards:
+
+| Resource | State | Verdict |
+| --- | --- | --- |
+| CloudFormation stack | does not exist | deleted |
+| ECS cluster | `INACTIVE` | deleted (ECS keeps the record for a while) |
+| Task definition `:1` | `DELETE_IN_PROGRESS` | being deleted by ECS |
+| ECR repository and images | `RepositoryNotFoundException` | deleted |
+| Log group `/ecs/luciano-experiment-fargate-iouring` | none | deleted |
+| VPC tagged with the project | none | deleted |
+
+The tagging API still listed the two stopped tasks, the cluster and the task
+definition for a while after deletion. Those are records ECS removes on its
+own, and they have no cost.
