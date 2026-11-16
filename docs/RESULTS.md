@@ -282,9 +282,18 @@ The stack was deleted from the console after both runs. State checked with the A
 | Log group `/ecs/luciano-experiment-fargate-iouring` | none | deleted |
 | VPC tagged with the project | none | deleted |
 
-The ECS on EC2 stack is deleted the same way:
-`STACK_NAME=luciano-experiment-ecs-ec2-iouring scripts/cleanup.sh --yes`.
+The ECS on EC2 stack was deleted with
+`STACK_NAME=luciano-experiment-ecs-ec2-iouring scripts/cleanup.sh --yes`,
+which also deleted task definition revision `:1`. Checked afterwards:
 
-The tagging API still listed the two stopped tasks, the cluster and the task
-definition for a while after deletion. Those are records ECS removes on its
-own, and they have no cost.
+| Resource | State | Verdict |
+| --- | --- | --- |
+| CloudFormation stack | deleted (`stack-delete-complete`) | deleted |
+| Both EC2 container instances | `terminated` | deleted |
+| Both EBS root volumes | `InvalidVolume.NotFound`, no volumes with the project tag | deleted |
+| Task definition `:1` | deleted by the script | deleted |
+
+For both stacks, the tagging API still listed stopped tasks, the inactive
+cluster, the deleted task definition and (for EC2) the terminated instances
+and deleted volumes for a while after deletion. Those are stale records that
+AWS removes on its own, and they have no cost.
