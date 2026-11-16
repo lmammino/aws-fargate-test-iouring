@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STACK_NAME="luciano-experiment-fargate-iouring"
+# Override to target the ECS on EC2 stack (luciano-experiment-ecs-ec2-iouring).
+STACK_NAME="${STACK_NAME:-luciano-experiment-fargate-iouring}"
 # shellcheck disable=SC2034
 TEMPLATE="$ROOT_DIR/infra/cloudformation/template.yaml"
 # shellcheck disable=SC2034 # used by the scripts that source this file

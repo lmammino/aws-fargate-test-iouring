@@ -1,4 +1,4 @@
-# Results: io_uring on AWS ECS Fargate
+# Results: io_uring on AWS ECS Fargate (and ECS on EC2)
 
 Run date: 2026-11-16. Two runs, identical results. Evidence (`task.json`,
 `log-events.json`, `probe.log`, `result.json`, `summary.json`):
@@ -6,9 +6,14 @@ Run date: 2026-11-16. Two runs, identical results. Evidence (`task.json`,
 - Run 1: [`results/20261116T110509Z-4db7c61a9d62471b85664d25caa6a3e4/`](../results/20261116T110509Z-4db7c61a9d62471b85664d25caa6a3e4/)
 - Run 2: [`results/20261116T110827Z-7885d64dc0ca41d188917ba4912f0d86/`](../results/20261116T110827Z-7885d64dc0ca41d188917ba4912f0d86/)
 
+ECS on EC2 comparison (section 7):
+
+- Docker default profile: [`results/20261116T112603Z-ec2-docker-default-e282860901f54543bcb4f7459c8023d7/`](../results/20261116T112603Z-ec2-docker-default-e282860901f54543bcb4f7459c8023d7/)
+- Default profile plus io_uring: [`results/20261116T112616Z-ec2-custom-iouring-dbfd7827be324af7810b4c41cb770420/`](../results/20261116T112616Z-ec2-custom-iouring-dbfd7827be324af7810b4c41cb770420/)
+
 Account ids, subnet and ENI ids, MAC and private IP addresses were replaced
 with placeholders by `scripts/redact-results.sh`. Nothing else was changed.
-Sections 2 to 4 quote run 1.
+Sections 2 to 4 quote Fargate run 1.
 
 ## 1. Executive summary
 
@@ -21,6 +26,15 @@ The kernel has io_uring compiled in, but all three io_uring syscalls
 before the kernel looks at their arguments. That pattern, together with
 `Seccomp: 2` and one active filter, points to the container's seccomp filter.
 Task definitions on Fargate offer no setting that changes this.
+
+**Does it work on ECS on EC2? Only with a custom seccomp profile.** With the
+same image on an ECS-optimized AL2023 instance, Docker's default profile gives
+the same `EPERM` result as Fargate. Adding only the three io_uring syscalls to
+that profile (set as the Docker daemon default) makes every test pass,
+including SQPOLL and registered buffers and files. The task stays
+unprivileged, non-root and without added capabilities. Changing only the
+seccomp profile flips the outcome, which confirms seccomp as the blocker on
+ECS on EC2 and strongly supports it as the blocker on Fargate.
 
 ## 2. Test environment
 
@@ -137,7 +151,7 @@ syscalls with the default Docker profile, all tests passing with
 | Kernel policy (`kernel.io_uring_disabled`) | **Ruled out** | The sysctl file does not exist (added in 6.6, apparently not backported to this kernel). It would also only affect `io_uring_setup`, not `enter` or `register`. |
 | Linux capabilities | **Not the cause** | Basic ring setup needs no capability. `CapEff` is empty because the probe runs as non-root, but nothing in io_uring setup checks capabilities when the sysctl is absent. |
 | Unsupported operation or flags | **Ruled out** | The calls fail the same way with valid (`entries=8`) and invalid arguments. No operation was ever submitted. |
-| Seccomp filter | **Most likely cause** | Seccomp mode 2 with one filter. `io_uring_enter(-1, ...)` and `io_uring_register(-1, ...)` returned `EPERM`. The kernel would have returned `EBADF` because no file descriptor -1 exists, so something rejected the calls before the kernel ran them. A seccomp filter is the mechanism that does that. `EPERM` is the default errno of the containerd and Docker profiles, which removed io_uring in containerd 2.0 and Docker 25.0. |
+| Seccomp filter | **Most likely cause** (confirmed on ECS on EC2, see section 7) | Seccomp mode 2 with one filter. `io_uring_enter(-1, ...)` and `io_uring_register(-1, ...)` returned `EPERM`. The kernel would have returned `EBADF` because no file descriptor -1 exists, so something rejected the calls before the kernel ran them. A seccomp filter is the mechanism that does that. `EPERM` is the default errno of the containerd and Docker profiles, which removed io_uring in containerd 2.0 and Docker 25.0. |
 
 What the evidence does not establish:
 
@@ -164,13 +178,17 @@ What the evidence does not establish:
   blocking thread pool for files). It needs no special kernel access, and the
   probe's conventional I/O control test passed.
 - **If io_uring is required:** run the workload where you control the seccomp
-  profile. Options (hypotheses, not tested here):
-  - ECS on EC2: ECS has no seccomp setting in task definitions. You would have
-    to change the Docker daemon's default seccomp profile on the instance, which
-    affects every container on it, or use `privileged`, which removes much more
-    isolation than needed. Neither is recommended without a security review.
-  - EKS on EC2: Kubernetes supports per-pod `seccompProfile` (`Localhost`
-    profile that adds the three io_uring syscalls).
+  profile.
+  - ECS on EC2 (**tested, works**): ECS has no seccomp setting in task
+    definitions, so set a custom default profile on the Docker daemon
+    (Docker's default plus the three io_uring syscalls) through the instance
+    user data, as `infra/cloudformation/ecs-ec2.yaml` does. This affects every
+    container on the instance, so use dedicated instances (a separate capacity
+    provider) for io_uring workloads. `privileged` would also work but removes
+    far more isolation than needed (not tested, not recommended).
+  - EKS on EC2 (not tested): Kubernetes supports per-pod `seccompProfile`
+    (`Localhost` profile that adds the three io_uring syscalls), which limits
+    the change to one workload.
   - Note that upstream removed io_uring from the default profiles because of
     container-escape risk (see RESEARCH.md). Enabling it is a deliberate
     security trade-off.
@@ -178,17 +196,57 @@ What the evidence does not establish:
   `ENOSYS` from `io_uring_setup` at startup and fall back to epoll. The probe's
   `direct_syscall` test shows a cheap way to detect this.
 
-## 7. Optional follow-up: ECS on EC2 comparison
+## 7. ECS on EC2 comparison
 
-Not run. It needs EC2 instances, which require your approval. Proposed design:
+Goal: tell apart "blocked by Fargate" from "blocked by the container seccomp
+default". Template: `infra/cloudformation/ecs-ec2.yaml` (stack
+`luciano-experiment-ecs-ec2-iouring`). One cluster, two `t3.micro` container
+instances on the ECS-optimized AL2023 AMI, same task definition shape as
+Fargate (0.25 vCPU, 512 MiB, x86_64, not privileged, no added capabilities,
+bridge network mode), same image digest `sha256:09492b99...4d5f`.
 
-- Same image digest, same task definition, `requiresCompatibilities: EC2`, on
-  one `t3.micro` with the current ECS-optimized AL2023 AMI.
-- Run 1, default Docker profile. Expected (hypothesis): `EPERM`, same as Fargate.
-- Run 2, the instance's Docker daemon uses a custom default profile that adds
-  the three io_uring syscalls. Expected (hypothesis): `supported`.
-- This would show whether the block comes from the container seccomp default
-  in general rather than something specific to Fargate.
+| Instance | Docker seccomp profile |
+| --- | --- |
+| `docker-default` | Docker's built-in default |
+| `custom-iouring` | [moby v25.0.18 `default.json`](https://github.com/moby/moby/blob/v25.0.18/profiles/seccomp/default.json) (SHA-256 `9c1025c8...9c76`) plus one rule allowing `io_uring_setup`, `io_uring_enter`, `io_uring_register`, set as the daemon's `seccomp-profile` |
+
+### Results
+
+| | Fargate (runs 1 and 2) | EC2, Docker default | EC2, default + io_uring |
+| --- | --- | --- | --- |
+| Kernel | 6.1.189 (Bottlerocket toolchain) | 6.1.190-237.442.amzn2023 | 6.1.190-237.442.amzn2023 |
+| Seccomp | mode 2, 1 filter | mode 2, 1 filter | mode 2, 1 filter |
+| `CapEff` / uid | none / 65532 | none / 65532 | none / 65532 |
+| `kernel.io_uring_disabled` | not present | not present | not present |
+| `RLIMIT_MEMLOCK` | 8 MiB | unlimited | unlimited |
+| `io_uring_setup(entries=0)` | `EPERM` | `EPERM` | `EINVAL` (kernel) |
+| `io_uring_enter(fd=-1)` | `EPERM` | `EPERM` | `EBADF` (kernel) |
+| `io_uring_register(fd=-1)` | `EPERM` | `EPERM` | `EBADF` (kernel) |
+| direct_syscall, ring_initialization | failed `EPERM` | failed `EPERM` | passed (8 SQ / 16 CQ entries, features `0x1fff`) |
+| nop, file_write, file_read | skipped | skipped | passed, data verified |
+| opcode_probe | skipped | skipped | passed, 49 opcodes |
+| registered_buffers, registered_files, sqpoll | skipped | skipped | passed |
+| conventional_io | passed | passed | passed |
+| Classification, exit code | unavailable, 11 | unavailable, 11 | **supported, 0** |
+
+Both EC2 tasks ran in eu-west-1a at 11:25:57 and 11:26:09 UTC and stopped with
+`EssentialContainerExited`.
+
+### Interpretation
+
+- The Docker default profile on ECS on EC2 reproduces the Fargate result
+  exactly, errno for errno.
+- The only difference between the two EC2 instances is the seccomp profile.
+  Allowing the three syscalls turns `EPERM` into the kernel's own argument
+  errors (`EINVAL`, `EBADF`), exactly as the reachability check predicts, and
+  all io_uring tests pass. Seccomp is the blocker on ECS on EC2.
+- Fargate's kernel differs (6.1.189, Bottlerocket toolchain), so the EC2 run
+  does not prove what Fargate's filter contains. It does show that the
+  Fargate behavior is identical to a standard container seccomp profile without
+  io_uring, which is the simplest explanation.
+- `RLIMIT_MEMLOCK` is 8 MiB on Fargate and unlimited on EC2. It played no role
+  here (rings were never created on Fargate), but it would limit registered
+  buffers on Fargate if io_uring were ever allowed.
 
 ## 8. Reproducibility and cleanup
 
@@ -223,6 +281,9 @@ The stack was deleted from the console after both runs. State checked with the A
 | ECR repository and images | `RepositoryNotFoundException` | deleted |
 | Log group `/ecs/luciano-experiment-fargate-iouring` | none | deleted |
 | VPC tagged with the project | none | deleted |
+
+The ECS on EC2 stack is deleted the same way:
+`STACK_NAME=luciano-experiment-ecs-ec2-iouring scripts/cleanup.sh --yes`.
 
 The tagging API still listed the two stopped tasks, the cluster and the task
 definition for a while after deletion. Those are records ECS removes on its

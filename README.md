@@ -1,7 +1,8 @@
 # io_uring on ECS Fargate: proof of concept
 
 Runs a small Rust probe as a standalone ECS Fargate task to find out, with
-evidence, whether Linux `io_uring` works there.
+evidence, whether Linux `io_uring` works there. An optional ECS on EC2
+comparison checks whether the container seccomp profile is the cause.
 
 - Research and expectations: [docs/RESEARCH.md](docs/RESEARCH.md)
 - Experiment results: [docs/RESULTS.md](docs/RESULTS.md)
@@ -12,22 +13,22 @@ As of 2026-11-16, io_uring is **not available** on ECS Fargate (platform
 1.4.0, kernel 6.1.189, eu-west-1). The kernel supports it, but
 `io_uring_setup`, `io_uring_enter` and `io_uring_register` all fail with
 `EPERM` before reaching the kernel, consistent with the container seccomp
-filter. Fargate offers no setting to change this. Details in
-[docs/RESULTS.md](docs/RESULTS.md).
+filter. Fargate offers no setting to change this.
 
-```
- CloudFormation stack ──► ECR repo, cluster, task def, log group, VPC
- scripts/push-image.sh ──► docker build/push (linux/amd64) ──► ECR repo
- scripts/run-test.sh ──► RunTask (Fargate) ──► probe ──► CloudWatch Logs
- scripts/collect-results.sh ◄────────────── describe-tasks + log events ──► results/
-```
+On **ECS on EC2** (AL2023, kernel 6.1.190) the result is the same with
+Docker's default seccomp profile. Adding just the three io_uring syscalls to
+that profile, as the Docker daemon default, makes every io_uring test pass,
+with an unprivileged, non-root container. So io_uring on ECS is possible, but
+only on EC2 instances whose Docker seccomp profile you change.
+
+Details in [docs/RESULTS.md](docs/RESULTS.md).
 
 ## Layout
 
 | Path | Contents |
 | --- | --- |
 | `app/` | Rust probe (`io-uring` crate + raw syscalls), multi-stage Dockerfile |
-| `infra/cloudformation/` | CloudFormation template (primary deployment path) |
+| `infra/cloudformation/` | CloudFormation templates: `template.yaml` (Fargate, primary), `ecs-ec2.yaml` (ECS on EC2 comparison) |
 | `infra/` | Equivalent AWS CDK v2 (TypeScript) stack |
 | `scripts/` | deploy, run, collect, cleanup |
 | `results/` | Raw output of each Fargate run (created by `collect-results.sh`) |
@@ -158,7 +159,50 @@ endpoint.
 **Cost:** a few cents per run (Fargate per-second billing, ECR storage, a
 public IPv4 address while the task runs). Nothing runs between tests.
 
-### CDK alternative
+## ECS on EC2 comparison (optional)
+
+Checks whether the Fargate result comes from the container seccomp default
+rather than Fargate itself. Template:
+[`infra/cloudformation/ecs-ec2.yaml`](infra/cloudformation/ecs-ec2.yaml),
+stack name `luciano-experiment-ecs-ec2-iouring`.
+
+One cluster, two `t3.micro` container instances (ECS-optimized AL2023 AMI),
+same probe image and task size as Fargate:
+
+| Instance attribute `iouring-experiment.seccomp` | Docker seccomp profile |
+| --- | --- |
+| `docker-default` | Docker's built-in default (blocks io_uring) |
+| `custom-iouring` | Docker v25.0.18 default profile plus `io_uring_setup`, `io_uring_enter`, `io_uring_register`, set as the daemon default |
+
+The custom instance downloads the upstream profile pinned by tag and SHA-256,
+adds the three syscalls, restarts Docker and registers with ECS only if
+`docker info` confirms the custom profile is active. The task is never
+privileged and adds no capabilities. Instances use IMDSv2 with hop limit 1 and
+a security group with no inbound rules.
+
+```sh
+aws cloudformation deploy \
+  --stack-name luciano-experiment-ecs-ec2-iouring \
+  --template-file infra/cloudformation/ecs-ec2.yaml \
+  --capabilities CAPABILITY_IAM \
+  --tags Project=luciano-experiment-ecs-ec2-iouring
+
+STACK_NAME=luciano-experiment-ecs-ec2-iouring scripts/push-image.sh
+scripts/run-test-ec2.sh docker-default
+scripts/run-test-ec2.sh custom-iouring
+scripts/redact-results.sh
+STACK_NAME=luciano-experiment-ecs-ec2-iouring scripts/cleanup.sh --yes
+```
+
+**Cost:** two `t3.micro` instances, their 30 GiB root volumes and public IPv4
+addresses: roughly USD 0.04 per hour in eu-west-1 while the stack exists.
+Delete it right after the runs.
+
+If an instance never registers, check its boot log:
+`aws ec2 get-console-output --instance-id <id> --latest --output text`
+(instance ids are stack outputs).
+
+## CDK alternative
 
 `infra/` also contains an equivalent CDK v2 stack (same stack name and
 outputs). The scripts only use the CloudFormation template.

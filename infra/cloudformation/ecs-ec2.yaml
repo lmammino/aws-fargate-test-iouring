@@ -1,0 +1,322 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  luciano-experiment-ecs-ec2-iouring: ECS on EC2 comparison for the io_uring
+  experiment. Two EC2 container instances in one cluster: one with Docker's
+  default seccomp profile, one with the same profile plus the three io_uring
+  syscalls. No service, load balancer or NAT gateway. Delete the stack when
+  the experiment is done (the instances bill per second while it exists).
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: luciano-experiment-ecs-ec2-iouring
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{1,40}$"
+    Description: Prefix for resource names and the Project tag.
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: Tag of the probe image in the stack's ECR repository.
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedPattern: "^[a-z0-9]+\\.[a-z0-9]+$"
+    Description: x86_64 instance type for both container instances.
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
+    Description: ECS-optimized Amazon Linux 2023 AMI (x86_64).
+  SeccompBaseProfileUrl:
+    Type: String
+    Default: https://raw.githubusercontent.com/moby/moby/v25.0.18/profiles/seccomp/default.json
+    Description: >-
+      Docker's default seccomp profile for the Docker version on the AMI. The
+      custom instance adds the io_uring syscalls to it and nothing else.
+  SeccompBaseProfileSha256:
+    Type: String
+    Default: 9c1025c88ccaa517b648da571961838744ea2137f176bfe6a48b21294cae9c76
+    AllowedPattern: "^[0-9a-f]{64}$"
+    Description: Expected SHA-256 of SeccompBaseProfileUrl. Boot fails on mismatch.
+
+Resources:
+  # ---------- Container registry ----------
+  Repository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref NamePrefix
+      EmptyOnDelete: true
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  # ---------- Networking: one public subnet, no NAT gateway ----------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.43.0.0/24
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - { Key: Name, Value: !Ref NamePrefix }
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - { Key: Name, Value: !Ref NamePrefix }
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${NamePrefix}-public" }
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.43.0.0/26
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - { Key: Name, Value: !Sub "${NamePrefix}-public" }
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  SubnetRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # No inbound rules. Outbound is needed for ECS, ECR, Logs and the profile download.
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-instances"
+      GroupDescription: io_uring experiment container instances, no inbound, all outbound
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  # ---------- ECS ----------
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref NamePrefix
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub "/ecs/${NamePrefix}"
+      RetentionInDays: 7
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  # Used by the ECS agent only: pull from this repo, write to this log group.
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: pull-image-and-write-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                Resource: !GetAtt Repository.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${LogGroup.Arn}"
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  # Lets the ECS agent on each instance register with the cluster.
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  # IMDSv2 only, hop limit 1: bridge-mode containers cannot reach instance credentials.
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Ref NamePrefix
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile: { Arn: !GetAtt InstanceProfile.Arn }
+        SecurityGroupIds: [!Ref InstanceSecurityGroup]
+        MetadataOptions:
+          HttpTokens: required
+          HttpPutResponseHopLimit: 1
+          HttpEndpoint: enabled
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - { Key: Project, Value: !Ref NamePrefix }
+          - ResourceType: volume
+            Tags:
+              - { Key: Project, Value: !Ref NamePrefix }
+
+  # Control: stock ECS AMI, Docker's built-in default seccomp profile.
+  DefaultProfileInstance:
+    Type: AWS::EC2::Instance
+    DependsOn: DefaultRoute
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - { Key: Name, Value: !Sub "${NamePrefix}-docker-default" }
+        - { Key: Project, Value: !Ref NamePrefix }
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          docker info --format '{{json .SecurityOptions}}'
+          cat >> /etc/ecs/ecs.config <<'EOF'
+          ECS_CLUSTER=${Cluster}
+          ECS_INSTANCE_ATTRIBUTES={"iouring-experiment.seccomp":"docker-default"}
+          EOF
+
+  # Treatment: Docker's default profile plus io_uring_setup/enter/register.
+  # Registers with ECS only after the custom profile is verified active.
+  IouringProfileInstance:
+    Type: AWS::EC2::Instance
+    DependsOn: DefaultRoute
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - { Key: Name, Value: !Sub "${NamePrefix}-custom-iouring" }
+        - { Key: Project, Value: !Ref NamePrefix }
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          curl -fsSL --retry 5 -o /tmp/docker-default.json '${SeccompBaseProfileUrl}'
+          echo '${SeccompBaseProfileSha256}  /tmp/docker-default.json' | sha256sum -c -
+
+          mkdir -p /etc/docker
+          python3 - <<'PY'
+          import json, os
+          profile = json.load(open("/tmp/docker-default.json"))
+          profile["syscalls"].append({
+              "names": ["io_uring_setup", "io_uring_enter", "io_uring_register"],
+              "action": "SCMP_ACT_ALLOW",
+          })
+          json.dump(profile, open("/etc/docker/seccomp-iouring.json", "w"), indent=1)
+
+          path = "/etc/docker/daemon.json"
+          config = json.load(open(path)) if os.path.exists(path) else {}
+          config["seccomp-profile"] = "/etc/docker/seccomp-iouring.json"
+          json.dump(config, open(path, "w"), indent=1)
+          PY
+
+          systemctl restart docker
+          info="$(docker info --format '{{json .SecurityOptions}}')"
+          echo "docker security options: $info"
+          if ! grep -q 'name=seccomp' <<<"$info" || grep -q 'profile=builtin' <<<"$info"; then
+            echo "custom seccomp profile is not active, not registering with ECS" >&2
+            exit 1
+          fi
+
+          cat >> /etc/ecs/ecs.config <<'EOF'
+          ECS_CLUSTER=${Cluster}
+          ECS_INSTANCE_ATTRIBUTES={"iouring-experiment.seccomp":"custom-iouring"}
+          EOF
+
+  # Same probe image and size as the Fargate run. Not privileged, no added
+  # capabilities. Bridge mode: no task ENI needed on small instances.
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref NamePrefix
+      RequiresCompatibilities: [EC2]
+      NetworkMode: bridge
+      Cpu: "256"
+      Memory: "512"
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: X86_64
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: probe
+          Image: !Sub "${Repository.RepositoryUri}:${ImageTag}"
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: probe
+      Tags:
+        - { Key: Project, Value: !Ref NamePrefix }
+
+Outputs:
+  ClusterName:
+    Value: !Ref Cluster
+  TaskDefinitionArn:
+    Value: !Ref TaskDefinition
+  RepositoryUri:
+    Value: !GetAtt Repository.RepositoryUri
+  LogGroupName:
+    Value: !Ref LogGroup
+  DefaultProfileInstanceId:
+    Value: !Ref DefaultProfileInstance
+  IouringProfileInstanceId:
+    Value: !Ref IouringProfileInstance

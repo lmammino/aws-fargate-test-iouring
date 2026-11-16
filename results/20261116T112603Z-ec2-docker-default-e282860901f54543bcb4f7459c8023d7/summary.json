@@ -1,0 +1,29 @@
+{
+  "taskArn": "arn:aws:ecs:eu-west-1:ACCOUNT_ID:task/luciano-experiment-ecs-ec2-iouring/e282860901f54543bcb4f7459c8023d7",
+  "launchType": "EC2",
+  "lastStatus": "STOPPED",
+  "stopCode": "EssentialContainerExited",
+  "stoppedReason": "Essential container in task exited",
+  "platformVersion": null,
+  "platformFamily": null,
+  "cpu": "256",
+  "memory": "512",
+  "availabilityZone": "eu-west-1a",
+  "createdAt": "2026-11-16T11:25:54.386000+00:00",
+  "startedAt": "2026-11-16T11:25:57.832000+00:00",
+  "stoppedAt": "2026-11-16T11:25:58.395000+00:00",
+  "container": {
+    "name": "probe",
+    "image": "ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/luciano-experiment-ecs-ec2-iouring:latest",
+    "imageDigest": "sha256:09492b99f2bf5faf0664e45debb52be32f2af01889ef77a42ad1bf2380f24d5f",
+    "exitCode": 11,
+    "reason": null,
+    "lastStatus": "STOPPED"
+  },
+  "probe_summary": {
+    "classification": "unavailable",
+    "exit_code": 11,
+    "explanation": "io_uring_setup failed both via raw syscall and via the io-uring crate"
+  },
+  "kernel": "6.1.190-237.442.amzn2023.x86_64"
+}

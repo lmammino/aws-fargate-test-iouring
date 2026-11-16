@@ -14,7 +14,8 @@ task="$(jq '.tasks[0]' <<<"$task_json")"
 [[ "$task" != "null" ]] || die "task $1 not found (ECS keeps stopped tasks for about 1 hour)"
 
 task_id="$(jq -r '.taskArn | split("/") | last' <<<"$task")"
-out_dir="$RESULTS_DIR/$(date -u +%Y%m%dT%H%M%SZ)-$task_id"
+# Optional RESULT_LABEL (e.g. ec2-custom-iouring) is added to the directory name.
+out_dir="$RESULTS_DIR/$(date -u +%Y%m%dT%H%M%SZ)-${RESULT_LABEL:+$RESULT_LABEL-}$task_id"
 mkdir -p "$out_dir"
 jq . <<<"$task" > "$out_dir/task.json"
 
@@ -38,7 +39,7 @@ else
 fi
 
 jq '{
-  taskArn, lastStatus, stopCode, stoppedReason, platformVersion, platformFamily,
+  taskArn, launchType, lastStatus, stopCode, stoppedReason, platformVersion, platformFamily,
   cpu, memory, availabilityZone, createdAt, startedAt, stoppedAt,
   container: (.containers[0] | {name, image, imageDigest, exitCode, reason, lastStatus})
 }' "$out_dir/task.json" > "$out_dir/summary.json"

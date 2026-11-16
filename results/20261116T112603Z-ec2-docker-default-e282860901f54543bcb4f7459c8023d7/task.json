@@ -1,0 +1,59 @@
+{
+  "attachments": [],
+  "attributes": [
+    {
+      "name": "ecs.cpu-architecture",
+      "value": "x86_64"
+    }
+  ],
+  "availabilityZone": "eu-west-1a",
+  "clusterArn": "arn:aws:ecs:eu-west-1:ACCOUNT_ID:cluster/luciano-experiment-ecs-ec2-iouring",
+  "connectivity": "CONNECTED",
+  "connectivityAt": "2026-11-16T11:25:54.386000+00:00",
+  "containerInstanceArn": "arn:aws:ecs:eu-west-1:ACCOUNT_ID:container-instance/luciano-experiment-ecs-ec2-iouring/b41d0425dafc4dec9e2feeb1f205c7cb",
+  "containers": [
+    {
+      "containerArn": "arn:aws:ecs:eu-west-1:ACCOUNT_ID:container/luciano-experiment-ecs-ec2-iouring/e282860901f54543bcb4f7459c8023d7/b8a69732-29ea-4215-bf27-21ef8e22a53f",
+      "taskArn": "arn:aws:ecs:eu-west-1:ACCOUNT_ID:task/luciano-experiment-ecs-ec2-iouring/e282860901f54543bcb4f7459c8023d7",
+      "name": "probe",
+      "image": "ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/luciano-experiment-ecs-ec2-iouring:latest",
+      "imageDigest": "sha256:09492b99f2bf5faf0664e45debb52be32f2af01889ef77a42ad1bf2380f24d5f",
+      "runtimeId": "1a64b4a8516260e5a506dbafb90fd0acdced8c78cde9653ce1f8d3eedb850068",
+      "lastStatus": "STOPPED",
+      "exitCode": 11,
+      "networkBindings": [],
+      "networkInterfaces": [],
+      "healthStatus": "UNKNOWN",
+      "cpu": "0"
+    }
+  ],
+  "cpu": "256",
+  "createdAt": "2026-11-16T11:25:54.386000+00:00",
+  "desiredStatus": "STOPPED",
+  "enableExecuteCommand": false,
+  "executionStoppedAt": "2026-11-16T11:25:58.386000+00:00",
+  "group": "family:luciano-experiment-ecs-ec2-iouring",
+  "healthStatus": "UNKNOWN",
+  "lastStatus": "STOPPED",
+  "launchType": "EC2",
+  "memory": "512",
+  "overrides": {
+    "containerOverrides": [
+      {
+        "name": "probe"
+      }
+    ],
+    "inferenceAcceleratorOverrides": []
+  },
+  "pullStartedAt": "2026-11-16T11:25:56.278000+00:00",
+  "pullStoppedAt": "2026-11-16T11:25:57.803000+00:00",
+  "startedAt": "2026-11-16T11:25:57.832000+00:00",
+  "stopCode": "EssentialContainerExited",
+  "stoppedAt": "2026-11-16T11:25:58.395000+00:00",
+  "stoppedReason": "Essential container in task exited",
+  "stoppingAt": "2026-11-16T11:25:58.395000+00:00",
+  "tags": [],
+  "taskArn": "arn:aws:ecs:eu-west-1:ACCOUNT_ID:task/luciano-experiment-ecs-ec2-iouring/e282860901f54543bcb4f7459c8023d7",
+  "taskDefinitionArn": "arn:aws:ecs:eu-west-1:ACCOUNT_ID:task-definition/luciano-experiment-ecs-ec2-iouring:1",
+  "version": 4
+}

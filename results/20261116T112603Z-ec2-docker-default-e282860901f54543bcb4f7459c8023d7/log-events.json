@@ -1,0 +1,81 @@
+{
+    "events": [
+        {
+            "timestamp": 1794828357814,
+            "message": "[iouring-probe] starting io_uring probe v0.1.0",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] environment: {\"architecture\":\"x86_64\",\"cpu_count\":2,\"cpu_model\":\"Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz\",\"ecs_task_metadata\":{\"AvailabilityZone\":\"eu-west-1a\",\"Cluster\":\"luciano-experiment-ecs-ec2-iouring\",\"Family\":\"luciano-experiment-ecs-ec2-iouring\",\"LaunchType\":\"EC2\",\"Limits\":{\"CPU\":0.25,\"Memory\":512},\"Revision\":\"1\",\"TaskARN\":\"arn:aws:ecs:eu-west-1:ACCOUNT_ID:task/luciano-experiment-ecs-ec2-iouring/e282860901f54543bcb4f7459c8023d7\"},\"effective_capabilities\":{\"hex\":\"0000000000000000\",\"names\":[]},\"gid\":65532,\"io_uring_disabled\":null,\"io_uring_disabled_meaning\":null,\"io_uring_group\":null,\"kallsyms_io_uring_setup\":true,\"kernel\":{\"machine\":\"x86_64\",\"release\":\"6.1.190-237.442.amzn2023.x86_64\",\"sysname\":\"Linux\",\"version\":\"#1 SMP PREEMPT_DYNAMIC Thu Nov 12 01:09:55 UTC 2026\"},\"kernel_proc_version\":\"Linux version 6.1.190-237.442.amzn2023.x86_64 (mockbuild@ip-REDACTED) (gcc (GCC) 11.5.0 20240719 (Red Hat 11.5.0-5), GNU ld version 2.41-50.amzn2023.0.8) #1 SMP PREEMPT_DYNAMIC Thu Nov 12 01:09:55 UTC 2026\",\"os\":\"linux\",\"os_release\":\"Distroless\",\"proc_status\":{\"CapAmb\":\"0000000000000000\",\"CapBnd\":\"00000000a80425fb\",\"CapEff\":\"0000000000000000\",\"CapInh\":\"0000000000000000\",\"CapPrm\":\"0000000000000000\",\"Gid\":\"65532\\t65532\\t65532\\t65532\",\"NoNewPrivs\":\"0\",\"Seccomp_filters\":\"1\",\"Uid\":\"65532\\t65532\\t65532\\t65532\"},\"rlimit_memlock\":{\"hard\":\"unlimited\",\"soft\":\"unlimited\"},\"seccomp_mode\":2,\"seccomp_mode_meaning\":\"filter\",\"uid\":65532}",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] syscall reachability: {\"interpretation\":\"EBADF/EINVAL: syscall reached the kernel. EPERM: blocked before the kernel handler (seccomp, or io_uring_disabled for setup only). ENOSYS: not implemented or filtered with ENOSYS.\",\"io_uring_enter(fd=-1)\":{\"errno\":1,\"errno_name\":\"EPERM\",\"error\":\"Operation not permitted (os error 1)\"},\"io_uring_register(fd=-1)\":{\"errno\":1,\"errno_name\":\"EPERM\",\"error\":\"Operation not permitted (os error 1)\"},\"io_uring_setup(entries=0)\":{\"errno\":1,\"errno_name\":\"EPERM\",\"error\":\"Operation not permitted (os error 1)\"}}",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] test direct_syscall: failed (errno 1 EPERM: Operation not permitted (os error 1))",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] test ring_initialization: failed (errno 1 EPERM: Operation not permitted (os error 1))",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] test nop: skipped (ring initialization failed)",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] test file_write: skipped (ring initialization failed)",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] test file_read: skipped (ring initialization failed)",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] test opcode_probe: skipped (ring initialization failed)",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] test registered_buffers: skipped (ring initialization failed)",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] test registered_files: skipped (ring initialization failed)",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] test sqpoll: skipped (ring initialization failed)",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] test conventional_io: passed",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "[iouring-probe] classification: unavailable (io_uring_setup failed both via raw syscall and via the io-uring crate)",
+            "ingestionTime": 1794828358204
+        },
+        {
+            "timestamp": 1794828358052,
+            "message": "IOURING_PROBE_RESULT {\"environment\":{\"architecture\":\"x86_64\",\"cpu_count\":2,\"cpu_model\":\"Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz\",\"ecs_task_metadata\":{\"AvailabilityZone\":\"eu-west-1a\",\"Cluster\":\"luciano-experiment-ecs-ec2-iouring\",\"Family\":\"luciano-experiment-ecs-ec2-iouring\",\"LaunchType\":\"EC2\",\"Limits\":{\"CPU\":0.25,\"Memory\":512},\"Revision\":\"1\",\"TaskARN\":\"arn:aws:ecs:eu-west-1:ACCOUNT_ID:task/luciano-experiment-ecs-ec2-iouring/e282860901f54543bcb4f7459c8023d7\"},\"effective_capabilities\":{\"hex\":\"0000000000000000\",\"names\":[]},\"gid\":65532,\"io_uring_disabled\":null,\"io_uring_disabled_meaning\":null,\"io_uring_group\":null,\"kallsyms_io_uring_setup\":true,\"kernel\":{\"machine\":\"x86_64\",\"release\":\"6.1.190-237.442.amzn2023.x86_64\",\"sysname\":\"Linux\",\"version\":\"#1 SMP PREEMPT_DYNAMIC Thu Nov 12 01:09:55 UTC 2026\"},\"kernel_proc_version\":\"Linux version 6.1.190-237.442.amzn2023.x86_64 (mockbuild@ip-REDACTED) (gcc (GCC) 11.5.0 20240719 (Red Hat 11.5.0-5), GNU ld version 2.41-50.amzn2023.0.8) #1 SMP PREEMPT_DYNAMIC Thu Nov 12 01:09:55 UTC 2026\",\"os\":\"linux\",\"os_release\":\"Distroless\",\"proc_status\":{\"CapAmb\":\"0000000000000000\",\"CapBnd\":\"00000000a80425fb\",\"CapEff\":\"0000000000000000\",\"CapInh\":\"0000000000000000\",\"CapPrm\":\"0000000000000000\",\"Gid\":\"65532\\t65532\\t65532\\t65532\",\"NoNewPrivs\":\"0\",\"Seccomp_filters\":\"1\",\"Uid\":\"65532\\t65532\\t65532\\t65532\"},\"rlimit_memlock\":{\"hard\":\"unlimited\",\"soft\":\"unlimited\"},\"seccomp_mode\":2,\"seccomp_mode_meaning\":\"filter\",\"uid\":65532},\"probe\":{\"io_uring_crate\":\"0.7.16\",\"rustc\":\"rustc 1.99.1 (58cf8f9c3 2026-10-13)\",\"version\":\"0.1.0\"},\"schema_version\":1,\"summary\":{\"classification\":\"unavailable\",\"exit_code\":11,\"explanation\":\"io_uring_setup failed both via raw syscall and via the io-uring crate\"},\"syscall_reachability\":{\"interpretation\":\"EBADF/EINVAL: syscall reached the kernel. EPERM: blocked before the kernel handler (seccomp, or io_uring_disabled for setup only). ENOSYS: not implemented or filtered with ENOSYS.\",\"io_uring_enter(fd=-1)\":{\"errno\":1,\"errno_name\":\"EPERM\",\"error\":\"Operation not permitted (os error 1)\"},\"io_uring_register(fd=-1)\":{\"errno\":1,\"errno_name\":\"EPERM\",\"error\":\"Operation not permitted (os error 1)\"},\"io_uring_setup(entries=0)\":{\"errno\":1,\"errno_name\":\"EPERM\",\"error\":\"Operation not permitted (os error 1)\"}},\"tests\":{\"conventional_io\":{\"bytes_read\":40,\"data_verified\":true,\"status\":\"passed\"},\"direct_syscall\":{\"errno\":1,\"errno_name\":\"EPERM\",\"error\":\"Operation not permitted (os error 1)\",\"request\":{\"entries\":8,\"flags\":0,\"syscall_nr\":425},\"stage\":\"io_uring_setup\",\"status\":\"failed\"},\"file_read\":{\"reason\":\"ring initialization failed\",\"status\":\"skipped\"},\"file_write\":{\"reason\":\"ring initialization failed\",\"status\":\"skipped\"},\"nop\":{\"reason\":\"ring initialization failed\",\"status\":\"skipped\"},\"opcode_probe\":{\"reason\":\"ring initialization failed\",\"status\":\"skipped\"},\"registered_buffers\":{\"reason\":\"ring initialization failed\",\"status\":\"skipped\"},\"registered_files\":{\"reason\":\"ring initialization failed\",\"status\":\"skipped\"},\"ring_initialization\":{\"errno\":1,\"errno_name\":\"EPERM\",\"error\":\"Operation not permitted (os error 1)\",\"queue_depth\":8,\"stage\":\"IoUring::new\",\"status\":\"failed\"},\"sqpoll\":{\"reason\":\"ring initialization failed\",\"status\":\"skipped\"}}}",
+            "ingestionTime": 1794828358204
+        }
+    ],
+    "nextForwardToken": "f/40026009888014741098332761573017736881350618102664724494/s",
+    "nextBackwardToken": "b/40026009882707163741082473265332235932460308064241385472/s"
+}
